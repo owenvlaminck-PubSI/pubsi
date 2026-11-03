@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500&family=Inter:wght@400;500&display=swap');
+:root{--green:#0f2a22;--green2:#173a2f;--burg:#5a1a24;--brass:#c9a25a;--cream:#f3e9d6;--orange:#e8743b}
+*{box-sizing:border-box}body{margin:0;background:var(--green);color:var(--cream);font:16px/1.6 Inter,system-ui,sans-serif}
+h1,h2,h3{font-family:'Cormorant Garamond',serif;font-weight:700;color:var(--cream);margin:.2em 0}
+h1{font-size:clamp(2.6rem,6vw,4.6rem);line-height:1.05}h2{font-size:2.2rem}em{color:var(--orange);font-style:italic}
+a{color:var(--brass)}.wrap{max-width:1080px;margin:auto;padding:0 24px}
+nav{display:flex;justify-content:space-between;align-items:center;padding:22px 0;border-bottom:1px solid #c9a25a33}
+.logo{font-family:'Cormorant Garamond';font-size:1.8rem;letter-spacing:.08em}.logo b{color:var(--brass)}
+nav a{margin-left:20px;text-decoration:none;font-size:.9rem;letter-spacing:.06em;text-transform:uppercase}
+.hero{padding:80px 0 50px;background:radial-gradient(ellipse at 70% 0,#5a1a2466,transparent 60%)}
+.hero p{max-width:620px;font-size:1.15rem;opacity:.9}
+.btn{display:inline-block;padding:12px 22px;border:1px solid var(--brass);color:var(--green);background:var(--brass);border-radius:2px;text-decoration:none;font-weight:500;cursor:pointer;font-size:1rem}
+.btn.ghost{background:transparent;color:var(--brass)}
+section{padding:56px 0;border-bottom:1px solid #c9a25a22}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px}
+.card{background:var(--green2);border:1px solid #c9a25a33;padding:20px;border-radius:3px}
+.card.burg{background:var(--burg)}.muted{opacity:.7;font-size:.9rem}
+.feed{background:#0a1d17;border:1px solid #c9a25a44;height:380px;overflow:auto;padding:14px;font-size:.93rem}
+.msg{margin:0 0 8px}.msg b{color:var(--brass)}.msg.event{opacity:.6;font-style:italic}.msg.bar b{color:var(--orange)}
+pre{background:#0a1d17;border:1px solid #c9a25a33;padding:14px;overflow:auto;font-size:.85rem;color:#e9dcc2}
+input{padding:12px;border:1px solid var(--brass);background:#0a1d17;color:var(--cream);min-width:260px;font-size:1rem}
+.tabs button{background:none;border:1px solid #c9a25a55;color:var(--cream);padding:6px 12px;margin:0 6px 8px 0;cursor:pointer}
+.tabs button.on{background:var(--brass);color:var(--green)}
+footer{padding:40px 0;text-align:center;opacity:.6;font-size:.85rem}
+.door{font-family:'Cormorant Garamond';font-style:italic;cursor:default}.door:hover{color:var(--brass)}

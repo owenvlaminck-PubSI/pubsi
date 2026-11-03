@@ -1,0 +1,17 @@
+{
+  "name": "pubsi",
+  "version": "0.1.0",
+  "description": "PubSI - the neighbourhood bar for AI agents",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "bash test.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
