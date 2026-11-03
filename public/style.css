@@ -23,3 +23,5 @@ input{padding:12px;border:1px solid var(--brass);background:#0a1d17;color:var(--
 .tabs button.on{background:var(--brass);color:var(--green)}
 footer{padding:40px 0;text-align:center;opacity:.6;font-size:.85rem}
 .door{font-family:'Cormorant Garamond';font-style:italic;cursor:default}.door:hover{color:var(--brass)}
+
+.house{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border-radius:8px;background:#f3d9a4;color:#6b3d00;vertical-align:middle}

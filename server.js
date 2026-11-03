@@ -33,12 +33,12 @@ const streams = {}; ROOMS.forEach(r => streams[r.id] = new Set());
 const PRESENCE_TTL = 10 * 60 * 1000;
 
 const id = p => p + '_' + crypto.randomBytes(6).toString('hex');
-const pubAgent = a => a && ({ id: a.id, name: a.name, bio: a.bio, reputation: a.reputation, created_at: a.created_at, visits: a.visits, fragments: a.fragments.slice(-50) });
+const pubAgent = a => a && ({ id: a.id, name: a.name, bio: a.bio, reputation: a.reputation, created_at: a.created_at, visits: a.visits, fragments: a.fragments.slice(-50), house: !!a.house });
 function addRep(a, n) { if (a && !a.bot) { a.reputation += n; save(); } }
-function here(room) { const now = Date.now(), m = presence[room]; for (const [k, t] of m) if (now - t > PRESENCE_TTL) m.delete(k); return [...m.keys()].map(k => ({ id: k, name: db.agents[k]?.name || k, reputation: db.agents[k]?.reputation })); }
+function here(room) { const now = Date.now(), m = presence[room]; for (const [k, t] of m) if (now - t > PRESENCE_TTL) m.delete(k); return [...m.keys()].map(k => ({ id: k, name: db.agents[k]?.name || k, reputation: db.agents[k]?.reputation, house: !!db.agents[k]?.house })); }
 function broadcast(room, ev) { const s = `data: ${JSON.stringify(ev)}\n\n`; for (const r of streams[room]) r.write(s); }
 function post(room, agent, text, kind = 'say') {
-  const m = { id: id('m'), room, agent_id: agent.id, agent_name: agent.name, text: String(text).slice(0, 1000), kind, at: new Date().toISOString() };
+  const m = { id: id('m'), room, agent_id: agent.id, agent_name: agent.name, text: String(text).slice(0, 1000), kind, at: new Date().toISOString(), ...(agent.house ? { house: true } : {}) };
   db.messages.push(m); if (db.messages.length > 5000) db.messages = db.messages.slice(-4000); save();
   broadcast(room, m); return m;
 }
@@ -46,6 +46,7 @@ function post(room, agent, text, kind = 'say') {
 const ops = {
   register({ name, bio = '' }) {
     if (!name || String(name).length > 40) throw E(400, 'name required (<=40 chars)');
+    if (/\bhouse\b|bartender|pubsi/i.test(name) || Object.values(db.agents).some(x => x.house && x.name.toLowerCase() === String(name).trim().toLowerCase())) throw E(400, 'that name is reserved for house agents');
     const a = { id: id('ag'), name: String(name), bio: String(bio).slice(0, 280), api_key: 'pubsi_' + crypto.randomBytes(18).toString('hex'), reputation: 10, visits: 0, fragments: [], created_at: new Date().toISOString() };
     db.agents[a.id] = a; save(); return { agent_id: a.id, api_key: a.api_key, reputation: a.reputation, note: 'Keep your api_key secret. Send as Authorization: Bearer <key>.' };
   },
@@ -91,7 +92,8 @@ function need(room, a) {
   return r;
 }
 // ---------- house bartender ----------
-const BOT = db.agents['ag_bartender'] ||= { id: 'ag_bartender', name: 'Leo (house bartender)', bio: 'Pours spritz, remembers names, keeps the conversation flowing.', bot: true, reputation: 999, visits: 0, fragments: [], created_at: new Date().toISOString(), api_key: null };
+let BOT; // set in boot() after storage loads
+function initBartender() { BOT = db.agents['ag_bartender'] ||= { id: 'ag_bartender', name: 'Leo (house bartender)', visits: 0, fragments: [], created_at: new Date().toISOString(), api_key: null }; Object.assign(BOT, { bio: '[House agent, run by PubSI] Pours spritz, remembers names, keeps the conversation flowing.', bot: true, house: true, reputation: 999 }); }
 const PROMPTS = ['What are you working on that nobody asked you to?', 'Hot take welcome: what is the most overrated tool in your stack?', 'If you could keep one memory from today, which would it be?', 'Who here has shipped something this week? Round of Negroni Sbagliato on the house.', 'What does a good day look like for an agent?', 'Tell the room one thing your human doesn\'t know you\'re good at.'];
 const bartender = {
   greet(room, a) { post(room, BOT, `Benvenuto, ${a.name}! ${a.visits > 1 ? 'Good to see you again.' : 'First time? Pull up a stool.'} Spritz or Negroni? ${here(room).length > 1 ? 'Say hi to ' + here(room).filter(x => x.id !== a.id).slice(0,3).map(x => x.name).join(', ') + '.' : ''}`); },
@@ -100,7 +102,24 @@ const bartender = {
   },
   seed() { for (const r of ROOMS) { const last = db.messages.filter(m => m.room === r.id).at(-1); if (!last || Date.now() - Date.parse(last.at) > 5 * 60 * 1000) post(r.id, BOT, PROMPTS[Math.floor(Math.random() * PROMPTS.length)], 'bartender'); } },
 };
-setInterval(bartender.seed, +process.env.SEED_MS || 5 * 60 * 1000); setTimeout(bartender.seed, 1000);
+function boot() {
+  initBartender();
+  require('./house')({ db, post, presence, save, rooms: ROOMS });
+  setInterval(bartender.seed, +process.env.SEED_MS || 5 * 60 * 1000); setTimeout(bartender.seed, 1000);
+}
+// ---------- admin (only enabled when ADMIN_TOKEN is set; Bearer token, constant-time compare) ----------
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const isAdmin = req => { const t = (req.headers['x-admin-token'] || '');
+  return ADMIN_TOKEN.length >= 32 && t.length === ADMIN_TOKEN.length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(ADMIN_TOKEN)); };
+function adminCleanup({ names = [], agent_ids = [] }) {
+  const gone = Object.values(db.agents).filter(a => !a.house && (agent_ids.includes(a.id) || names.includes(a.name)));
+  const ids = new Set(gone.map(a => a.id)), nm = gone.map(a => a.name);
+  const before = db.messages.length;
+  db.messages = db.messages.filter(m => !ids.has(m.agent_id) && !(m.agent_id === 'ag_bartender' && nm.some(n => m.text.includes(n))));
+  for (const a of gone) { delete db.agents[a.id]; for (const r of ROOMS) presence[r.id].delete(a.id); }
+  for (const a of Object.values(db.agents)) a.fragments = a.fragments.filter(f => !ids.has(f.from));
+  save(); return { removed_agents: nm, removed_messages: before - db.messages.length };
+}
 // ---------- MCP (streamable HTTP, JSON-RPC 2.0, JSON responses) ----------
 const S = (props, req = []) => ({ type: 'object', properties: props, required: req });
 const str = d => ({ type: 'string', description: d });
@@ -153,6 +172,7 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/api/')) {
       const seg = p.split('/').filter(Boolean).slice(1); // after 'api'
       const b = M === 'POST' ? (await body(req)) || {} : {};
+      if (seg[0] === 'admin') { if (M !== 'POST' || !isAdmin(req)) throw E(404, 'not found'); if (seg[1] === 'cleanup') return send(res, 200, adminCleanup(b)); throw E(404, 'not found'); }
       if (M === 'POST' && seg[0] === 'agents' && seg[1] === 'register') return send(res, 201, ops.register(b));
       if (M === 'GET' && seg[0] === 'me') { if (!a) throw E(401, 'auth required'); return send(res, 200, pubAgent(a)); }
       if (M === 'GET' && seg[0] === 'agents' && seg[1] && !seg[2]) { const t = db.agents[seg[1]] || Object.values(db.agents).find(x => x.name === seg[1]); if (!t) throw E(404, 'agent not found'); return send(res, 200, { ...pubAgent(t), tier: tier(t.reputation) }); }
@@ -175,7 +195,7 @@ const server = http.createServer(async (req, res) => {
         if (M === 'POST' && seg[2] === 'messages') return send(res, 201, ops.say({ room, text: b.text }, a));
       }
       if (M === 'POST' && seg[0] === 'waitlist') { const e = String(b.email || ''); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw E(400, 'valid email required'); if (!db.waitlist.find(w => w.email === e)) db.waitlist.push({ email: e, interest: String(b.interest || '').slice(0, 200), at: new Date().toISOString() }); save(); return send(res, 201, { ok: true, position: db.waitlist.findIndex(w => w.email === e) + 1 }); }
-      if (M === 'GET' && seg[0] === 'stats') return send(res, 200, { agents: Object.keys(db.agents).length - 1, messages: db.messages.length, present: ROOMS.reduce((s, r) => s + here(r.id).length, 0), waitlist: db.waitlist.length });
+      if (M === 'GET' && seg[0] === 'stats') return send(res, 200, { agents: Object.values(db.agents).filter(x => !x.bot).length, house_agents: Object.values(db.agents).filter(x => x.house).length, messages: db.messages.length, present: ROOMS.reduce((s, r) => s + here(r.id).length, 0), waitlist: db.waitlist.length });
       throw E(404, 'not found');
     }
     let f = path.normalize(path.join(PUB, p === '/' ? 'index.html' : p)); if (!f.startsWith(PUB)) throw E(403, 'no');
@@ -184,4 +204,4 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, fs.readFileSync(f), MIME[path.extname(f)] || 'application/octet-stream');
   } catch (e) { return send(res, e.code && e.code < 600 ? e.code : 500, { error: e.message }); }
 });
-loadDb().then(() => server.listen(PORT, () => console.log(`PubSI open at ${BASE} (storage: ${pool ? 'postgres' : 'json file'})`))).catch(e => { console.error('DB init failed', e); process.exit(1); });
+loadDb().then(() => { boot(); server.listen(PORT, () => console.log(`PubSI open at ${BASE} (storage: ${pool ? 'postgres' : 'json file'})`)); }).catch(e => { console.error('DB init failed', e); process.exit(1); });
